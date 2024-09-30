@@ -1,0 +1,761 @@
+---
+title: Verb Identification Analysis
+author: "Grace Clark"
+date: "October 18, 2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Load Packages
+
+library(plyr); library(tidyr); library(data.table); library(lme4); library(lmerTest); library(lsmeans)
+library(knitr); library(gridExtra); library(pander); library(extrafont)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library (car)
+library(lme4)
+library(lsmeans)
+library(xtable)
+library(readxl)
+library(lattice)
+library(misty)
+library(effects)
+library(psych)
+library(nlme) #for mixed effects models
+```
+
+
+```{r data}
+#Verb Identification analysis
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data.xlsx")
+
+#Create conditions with no reference level
+data$ortho<-ifelse(data$condition=="present", .5, -.5)
+head(data)
+describe(data)
+
+
+#correctly label all variables
+data$ortho<-as.factor(data$ortho)
+data$Gender<-as.factor(data$Gender)
+data$Age<-as.numeric(data$Age)
+data$ReadingCG<-as.factor(data$ReadingCG)
+data$Readingint<-as.factor(data$Readingint)
+data$LetterID<-as.numeric(data$LetterID)
+
+
+
+#Create centered age field
+data$AgeC<-data$Age-mean(data$Age)
+head(data)
+
+#Empty model
+m0<-glmer(correct~(1|ID), data=data, family=binomial)
+summary(m0)
+#empty model shows nonsignificant intercept- did not perform signficantly better than chance
+
+#to see if ortho has effect 
+m1<-glmer(correct~(1|ID)+ortho, data=data, family=binomial)
+summary(m1)
+#intercept not significant which means did not perform significantly better than chance (approaching significance 0.088)
+#no effect of orthography 
+
+
+#to see if other fixed effects contribute to variance
+m2<-glmer(correct~(1|ID)+AgeC, data=data, family=binomial)
+summary(m2)
+#very large eigenvalue; rescale age
+data$AgeCS<-data$AgeC/10
+m3<-glmer(correct~(1|ID)+AgeCS, data=data, family=binomial)
+summary(m3)
+#Age not a significant contributor to correctness (p = 0.1569)
+
+#to see if caregiver reading rating contributes to variance
+m4<-glmer(correct~(1|ID)+ReadingCG, data=data, family=binomial)
+summary(m4)
+#some significant values when ran ReadingCG as factor but what does that mean (e.g., CG rating of 31 signficant but not others- need to figure out how to reference this or change to high and low reading group)
+#When ran model as numeric, no significant contribution of reading CG (p = 0.421)
+
+#to see if reading interest contributes to variance
+m5<-glmer(correct~(1|ID)+Readingint, data=data, family=binomial)
+summary(m5)
+#failed to converge- try to rerun as numeric instead of as factor. Some values approaching significance
+#when reran as numeric, reading interest not significant contributor to correctness (p = 0.2321)
+#change to numeric and see what the mean is to median split the groups.
+data$Readingint<-ifelse(data$Readingint >21.67, .5, -.5)
+data$Readingint<-as.factor(data$Readingint)
+m5<-glmer(correct~(1|ID)+Readingint, data=data, family=binomial)
+summary(m5)
+#p = .239 for median split reading interest
+
+#to see if letter ID skills contributes to variance
+m6<-glmer(correct~(1|ID)+LetterID, data=data, family=binomial)
+summary(m6)
+#Letter ID not a significant contributor to variance (p = 0.361)
+
+
+#make a model that includes all dependent variables
+m7<-glmer(correct~(1|ID)+AgeCS+ortho+Readingint+LetterID, data=data, family=binomial)
+summary(m7)
+#nothing significant
+plot(allEffects(m7))
+     
+
+#Is there an interaction between the effect of orthography and the effect of reading CG, reading int, or letter ID?
+m8<-glmer(correct~(1|ID)+ortho*ReadingCG, data=data, family=binomial)
+summary(m8)
+#interaction not significant
+plot(allEffects(m8))
+#higher CG ratings, overall more accurate; slightly higher level for ortho absent
+
+m9<-glmer(correct~(1|ID)+ortho*Readingint, data=data, family=binomial)
+summary(m9)
+#intercept approaching significance; interaction not significant
+plot(allEffects(m9))
+plot(allEffects(m9), rescale.axis=F, ylab="Proportion Correct", xlab="Reading Interest", main="Interaction of Reading Interest and Orthography")
+#higher reading interest did better overall; steeper slope in ortho absent condition
+
+m10<-glmer(correct~(1|ID)+ortho*LetterID, data=data, family=binomial)
+summary(m10)
+#No significant interaction
+plot(allEffects(m10))
+plot(allEffects(m10), rescale.axis=F, ylab="Proportion Correct", xlab="Letter Identification", main="Interaction of Letter Identification and Orthography")
+#Higher accuracy for more letter identification skills
+
+m11<-glmer(correct~(1|ID)+ortho*AgeCS, data=data, family=binomial)
+summary(m11)
+plot(allEffects(m11))
+
+
+#compare ortho only model to model with 1 fixed effect (pick reading)
+m11<-glmer(correct~(1|ID)+ortho+ReadingCG, data=data, family=binomial)
+summary(m11)
+#not significant 
+
+
+m12<-glmer(correct~(1|ID)+ortho+Readingint, data=data, family=binomial)
+summary(m12)
+#not significant
+
+m13<-glmer(correct~(1|ID)+ortho+LetterID, data=data, family=binomial)
+summary(m13)
+#not significant
+
+
+
+
+#What about when we remove trials that have no response?
+data2 <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM dataNR.xlsx")
+
+#Create conditions with no reference level
+data2$ortho<-ifelse(data2$condition=="present", .5, -.5)
+head(data2)
+describe(data2)
+
+
+#correctly label all variables
+data2$ortho<-as.factor(data2$ortho)
+data2$Gender<-as.factor(data2$Gender)
+data2$Age<-as.numeric(data2$Age)
+data2$ReadingCG<-as.factor(data2$ReadingCG)
+data2$Readingint<-as.factor(data2$Readingint)
+data2$LetterID<-as.numeric(data2$LetterID)
+
+
+
+#Create centered age field
+data2$AgeC<-data2$Age-mean(data2$Age)
+head(data2)
+
+#Empty model
+m14<-glmer(correct~(1|ID), data=data2, family=binomial)
+summary(m14)
+#empty model shows nonsignificant intercept- did not perform signficantly better than chance (p = 0.142)
+
+#to see if ortho has effect 
+m15<-glmer(correct~(1|ID)+ortho, data=data2, family=binomial)
+summary(m15)
+#intercept not significant which means did not perform significantly better than chance (approaching significance 0.088)
+#no effect of orthography 
+plot(allEffects(m15))
+
+m16<-glmer(correct~(1|ID)+AgeC, data=data2, family=binomial)
+summary(m16)
+#very large eigenvalue, rescale
+data2$AgeCS<-data2$AgeC/10
+m16<-glmer(correct~(1|ID)+AgeCS, data=data2, family=binomial)
+summary(m16)
+# age not significant
+
+m17<-glmer(correct~(1|ID)+ReadingCG, data=data2, family=binomial)
+summary(m17)
+#some values are significant (CG31, 42, 43, 48, 49)
+plot(allEffects(m17))
+#make it numeric and see what it looks like
+data2$ReadingCG<-as.numeric(data2$ReadingCG)
+#not significant
+
+m18<-glmer(correct~(1|ID)+Readingint, data=data2, family=binomial)
+summary(m18)
+#some values are significant (Int22, 23)
+plot(allEffects(m18))
+#make it numeric and see what it looks like
+data2$Readingint<-as.numeric(data2$Readingint)
+#not significant
+
+m19<-glmer(correct~(1|ID)+LetterID, data=data2, family=binomial)
+summary(m19)
+#not significant
+
+#check interactions
+m20<-glmer(correct~(1|ID)+ortho*AgeCS, data=data2, family=binomial)
+summary(m20)
+#not significant
+
+m21<-glmer(correct~(1|ID)+ortho*ReadingCG, data=data2, family=binomial)
+summary(m21)
+#not significant
+
+m22<-glmer(correct~(1|ID)+ortho*Readingint, data=data2, family=binomial)
+summary(m22)
+#not significant
+
+m23<-glmer(correct~(1|ID)+ortho*LetterID, data=data2, family=binomial)
+summary(m23)
+#not significant
+
+
+#TRY analyses with high and low groups instead of 30 different groups for CG and interest; median split
+data$ReadingCGF<-ifelse(data$ReadingCG > 44.5, .5, -.5)
+m24<-glmer(correct~(1|ID)+ortho*ReadingCGF, data=data, family=binomial)
+summary(m24)
+#Not significant interaction
+#try with just reading as main effect
+m25<-glmer(correct~(1|ID)+ReadingCGF, data=data, family=binomial)
+summary(m25)
+#not significant
+
+#Reading interest median split
+data$ReadingintF<-ifelse(data$Readingint > 22, .5, -.5)
+m26<-glmer(correct~(1|ID)+ortho*ReadingintF, data=data, family=binomial)
+summary(m26)
+m27<-glmer(correct~(1|ID)+ReadingintF, data=data, family=binomial)
+summary(m27)
+#not significant
+
+#letter ID mean split
+data$LetterIDF<-ifelse(data$LetterID > 6.92, .5, -.5)
+m28<-glmer(correct~(1|ID)+ortho*LetterIDF, data=data, family=binomial)
+summary(m28)
+m29<-glmer(correct~(1|ID)+LetterIDF, data=data, family=binomial)
+summary(m29)
+#nowhere near significant
+
+#Try removing all participants with low reliability
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data remove low reliability.xlsx")
+m30<-glmer(correct~(1|ID), data=data, family=binomial)
+summary(m30)
+
+m31<-glmer(correct~(1|ID)+ortho, data=data, family=binomial)
+summary(m31)
+#still nothing is significant. Intercept approaching significance in empty model
+
+#HOW DO YOU CHECK FOR ORDER EFFECTS?
+#added order column and assigned 1 for ortho present first and 0 for ortho absent first
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data.xlsx")
+data$ortho<-ifelse(data$condition=="present", .5, -.5)
+data$ortho<-as.factor(data$ortho)
+data$Gender<-as.factor(data$Gender)
+data$Age<-as.numeric(data$Age)
+data$ReadingCG<-as.numeric(data$ReadingCG)
+data$Readingint<-as.numeric(data$Readingint)
+data$LetterID<-as.numeric(data$LetterID)
+data$order<-as.factor(data$order)
+
+m32<-glmer(correct~(1|ID)+order, data=data, family=binomial)
+summary(m32)
+#order not significant (p = 0.205)
+m33<-glmer(correct~(1|ID)+ortho+order, data=data, family=binomial)
+summary(m33)
+
+#Try with only first 30 participants
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data first 30.xlsx")
+head(data)
+data$ortho<-ifelse(data$condition=="present", .5, -.5)
+
+data$ortho<-as.factor(data$ortho)
+data$Gender<-as.factor(data$Gender)
+data$Age<-as.numeric(data$Age)
+data$ReadingCG<-as.numeric(data$ReadingCG)
+data$Readingint<-as.numeric(data$Readingint)
+data$LetterID<-as.numeric(data$LetterID)
+data$order<-as.factor(data$order)
+
+m33<-glmer(correct~(1|ID)+ortho, data=data, family=binomial)
+summary(m33)
+#Intercept is now significant, participants did better than chance; ortho (p = 0.1336)
+
+m34<-glmer(correct~(1|ID)+ortho*ReadingCG, data=data, family=binomial)
+summary(m34)
+#ReadingCG approaching significance (p = 0.0781)
+
+m35<-glmer(correct~(1|ID)+ReadingCG, data=data, family=binomial)
+summary(m35)
+#Not significant by itself (p = 0.0886)
+
+m36<-glmer(correct~(1|ID)+Readingint, data=data, family=binomial)
+summary(m36)
+#p = 0.0717
+
+m37<-glmer(correct~(1|ID)+ortho*Readingint, data=data, family=binomial)
+summary(m37)
+#reading interest is significant (p = 0.0416) but not interaction
+
+m38<-glmer(correct~(1|ID)+LetterID, data=data, family=binomial)
+summary(m38)
+#not significant (p = 0.1539)
+
+m39<-glmer(correct~(1|ID)+ortho*LetterID, data=data, family=binomial)
+summary(m39)
+#nothing significant
+
+m40<-glmer(correct~(1|ID)+order, data=data, family=binomial)
+summary(m40)
+
+m41<-glmer(correct~(1|ID)+ortho*order, data=data, family=binomial)
+summary(m41)
+#nothing significant
+
+#Correlational analysis
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/Participant overview.xlsx")
+describe(data)
+corr.test(data$Age, data$ReadingCG)
+#r=0.11
+corr.test(data$Age, data$LetterID)
+#r=0.19 
+corr.test(data$Age, data$IDCorrectAbsent)
+#r=0.16
+corr.test(data$Age, data$IDCorrectPresent)
+#r=0.21
+print(corr.test(data$Age, data$LetterID),short=FALSE) 
+corr.test(data$Age, data$LetterID, use="pairwise")
+#r=0.19
+cor.test(data$ReadingCG, data$LetterID, method=c("spearman") )
+#rho = 0.44 (p = 0.002)
+print(corr.test(data$ReadingCG, data$LetterID),short=FALSE)
+#Lower 0.37 upper 0.75 (p =0)
+corr.test(data$ReadingCG, data$Readingint)
+#r =.64 (p = 0) lower CI 0.44, upper CI 0.78
+corr.test(data$Readingint, data$LetterID)
+#r = 0.33 (p = 0.02), lower CI 0.06, upper CI 0.56
+corr.test(data$ReadingCG, data$PerCorrectPresent)
+#r = .17 (p = 0.24)
+corr.test(data$Readingint, data$PerCorrectPresent)
+#r = .1 (p = .49)
+corr.test(data$LetterID, data$PerCorrectPresent)
+#r = .15 (p = 0.31)
+#also checked against PerCorrectAbsent and nothing significant; also checked NR results and NS
+
+#T-test check 
+t.test(data$PerCorrectAbsent, data$PerCorrectPresent, paired = TRUE, alternative = "two.sided")
+#p = 0.4588, 95 percent CI overlaps with 0
+t.test(data$PerCorrectAbsent, data$PerCorrectPresent, paired = TRUE, alternative = "less")
+
+t.test(data$PerCorrectAbsentNR, data$PerCorrectPresentNR, paired = TRUE, alternative = "two.sided")
+#p = 0.1036, 95 percent CI overlaps with 0
+t.test(data$PerCorrectAbsentNR, data$PerCorrectPresentNR, paired = TRUE, alternative = "less")
+#p = 0.05178, t = -1.6587 (mean difference -7.67)
+
+t.test(data$IDCorrectPresent, data$IDCorrectAbsent, paired = TRUE, alternative = "greater")
+#p-test is just half of two tailed
+
+
+
+#Visualizing data
+hist(data$ReadingCG)
+hist(data$Readingint)
+hist(data$LetterID)
+hist(data$Age)
+hist(data$IDCorrectAbsent)
+hist(data$IDCorrectPresent)
+hist(data$PerCorrectAbsent)
+hist(data$PerCorrectPresent)
+hist(data$PerCorrectAbsentNR)
+hist(data$PerCorrectPresentNR)
+
+
+plot(data$ReadingCG, data$PerCorrectPresent, pch=16, cex=1.3, col = "blue", main = "Proportion Correct in Ortho Plus Condition Plotted Against Reading", xlab="Reading", ylab="Proportion Correct")
+
+plot(data$Readingint, data$PerCorrectPresent, pch=16, cex=1.3, col = "blue", main = "Proportion Correct in Ortho Plus Condition Plotted Against Reading Interest", xlab="Reading Interest", ylab="Proportion Correct")
+
+plot(data$LetterID, data$PerCorrectPresent, pch=16, cex=1.3, col = "blue", main = "Proportion Correct in Ortho Plus Condition Plotted Against Letter Identification", xlab="Letter ID", ylab="Proportion Correct")
+
+#bar plot
+data2 <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data.xlsx")
+my_sum <- data2 %>%
+  group_by(condition) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+
+# Standard Error- bar plot of proprotion correct in each condition with standard error bars
+ggplot(my_sum) +
+  geom_bar( aes(x=condition, y=mean), stat="identity", fill="forestgreen", alpha=0.5) +
+  geom_errorbar( aes(x=condition, ymin=mean-se, ymax=mean+se), width=0.4, colour="orange", alpha=0.9, size=1.5) +
+  ggtitle("Proportion Correct in Post Test Across Conditions")
+
+#do this with age too
+describe(data2)
+data2$ageC<-ifelse(data2$Age>1284.7, .5, -.5)
+my_sum2 <- data2 %>%
+  group_by(condition, ageC) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum2)
+ggplot(my_sum2) +
+  geom_bar( aes(x=ageC, y=mean), stat="identity", fill="forestgreen", alpha=0.5) +
+  geom_errorbar( aes(x=ageC, ymin=mean-se, ymax=mean+se), width=0.4, colour="orange", alpha=0.9, size=1.5) +
+  ggtitle("Proportion Correct Across Median Split Ages")
+
+#do this with Reading variables too
+my_sum3 <- data2 %>%
+  group_by(ReadingCGC) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum3)
+ggplot(my_sum3) +
+  geom_bar( aes(x=ReadingCGC, y=mean), stat="identity", fill="forestgreen", alpha=0.5) +
+  geom_errorbar( aes(x=ReadingCGC, ymin=mean-se, ymax=mean+se), width=0.4, colour="orange", alpha=0.9, size=1.5) +
+  ggtitle("Proportion Correct Across Median Split Parent Reporting Reading Skills")
+
+data2$ReadingintC<-ifelse(data2$Readingint> 22, .5, -.5)
+my_sum4 <- data2 %>%
+  group_by(condition, ReadingintC) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum4)
+ggplot(my_sum4) +
+  geom_bar( aes(x=ReadingintC, y=mean), stat="identity", fill="forestgreen", alpha=0.5) +
+  geom_errorbar( aes(x=ReadingintC, ymin=mean-se, ymax=mean+se), width=0.4, colour="orange", alpha=0.9, size=1.5) +
+  ggtitle("Proportion Correct Across Median Split Parent Reporting Reading Interest")
+
+data2$LetterIDC<-ifelse(data2$LetterID > 6.92, .5, -.5)
+my_sum5 <- data2 %>%
+  group_by(condition, LetterIDC) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum5)
+ggplot(my_sum5) +
+  geom_bar( aes(x=LetterIDC, y=mean), stat="identity", fill="forestgreen", alpha=0.5) +
+  geom_errorbar( aes(x=LetterIDC, ymin=mean-se, ymax=mean+se), width=0.4, colour="orange", alpha=0.9, size=1.5) +
+  ggtitle("Proportion Correct Across Mean Split Letter Identification")
+
+
+
+
+#Post-hoc analyses of who passes vs who doesn't in ortho + condition
+library("gmodels")
+library("car")
+library("DescTools")
+library("ggplot2")
+library("qqplotr")
+library("dplyr")
+
+
+
+#to see if ortho has effect in POSTTEST 
+m1<-glmer(correct~(1|ID)+condition, data=data2, family=binomial)
+summary(m1)
+plot(allEffects(m1), rescale.axis=F, ylab="Proportion Correct", xlab="Orthography Condition", main="Effect of Orthography on Accuracy")
+
+
+m2<-glmer(correct~(1|ID)+condition*ReadingCG, data=data2, family=binomial)
+summary(m2)
+plot(allEffects(m2), rescale.axis=F, ylab="Proportion Correct", xlab="Orthography Condition", main="Interaction of Reading Ability and Orthography")
+
+m3<-glmer(correct~(1|ID)+condition*Readingint, data=data2, family=binomial)
+summary(m3)
+plot(allEffects(m3), rescale.axis=F, ylab="Proportion Correct", xlab="Orthography Condition", main="Interaction of Reading Ability and Orthography")
+
+m4<-glmer(correct~(1|ID)+condition*LetterID, data=data2, family=binomial)
+summary(m4)
+plot(allEffects(m4), rescale.axis=F, ylab="Proportion Correct", xlab="Orthography Condition", main="Interaction of Letter ID and Orthography")
+
+
+#Boxplot
+
+#Create ortho with no reference level
+data2$ortho<-ifelse(data2$condition=="absent", -.5, .5)
+head(data2)
+
+#correctly label all variables
+data2$ortho<-as.factor(data2$ortho)
+data2$Gender<-as.factor(data2$Gender)
+data2$Age<-as.numeric(data2$Age)
+data2$ReadingCG<-as.factor(data2$ReadingCG)
+data2$Readingint<-as.factor(data2$Readingint)
+data2$LetterID<-as.numeric(data2$LetterID)
+
+
+library(tidyverse)
+library(viridis)
+library(RColorBrewer)
+
+data2 <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data.xlsx")
+data2 %>%
+  ggplot( aes(x=ortho, y=`proportion correctNR`, fill=ortho)) +
+    geom_boxplot() +
+    scale_fill_brewer(type = "seq", palette=2) +
+    geom_jitter(color="blue", size=0.4, alpha=0.9) +
+  theme(
+      legend.position="none",
+      plot.title = element_text(size=18)
+    ) +
+    ggtitle("Proportion Correct in Each Condition") +
+    xlab("")
+
+data2 %>%
+  ggplot( aes(x=ortho, y=`proportioncorrect`, fill=ortho)) +
+    geom_boxplot() +
+    scale_fill_brewer(type = "seq", palette=2) +
+    geom_jitter(color="blue", size=0.4, alpha=0.9) +
+  theme(
+      legend.position="none",
+      plot.title = element_text(size=18)
+    ) +
+    ggtitle("Proportion Correct in Each Condition") +
+    xlab("")
+
+#determine binomial probability
+successes <- 7
+total_questions <- 8
+
+# Perform binomial test
+binom_test_result <- binom.test(successes, total_questions, p = 1/2, alternative = "greater")
+
+# Print results
+print(binom_test_result)
+
+
+
+#Verb Identification analysis- correct answers only
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data_correct.xlsx")
+
+#Create conditions with no reference level
+data$ortho<-ifelse(data$condition=="present", .5, -.5)
+head(data)
+describe(data)
+
+
+#correctly label all variables
+data$ortho<-as.factor(data$ortho)
+data$Gender<-as.factor(data$Gender)
+data$Age<-as.numeric(data$Age)
+data$ReadingCG<-as.factor(data$ReadingCG)
+data$Readingint<-as.factor(data$Readingint)
+data$LetterID<-as.numeric(data$LetterID)
+
+
+
+#Create centered age field
+data$AgeC<-data$Age-mean(data$Age)
+head(data)
+
+#this doesn't work because the outcome variable is a constant. Makes sense. Might do correlations but don't think that will work because of ordinal variables. 
+
+#look at post-hoc analysis with responders and non-responders
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data.xlsx")
+my_sum <- data %>%
+  group_by(facilitation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum)
+
+my_sum2 <- data %>%
+  group_by(condition, facilitation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum2)
+
+my_sum3 <- data %>%
+  group_by(condition, facilitationNR) %>%
+  summarise( 
+    n=n(),
+    mean=mean(correct),
+    sd=sd(correct)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum3)
+
+my_sum4 <- data %>%
+  group_by(facilitationNR) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Readingint),
+    sd=sd(Readingint)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum4)
+
+my_sum5 <- data %>%
+  group_by(facilitationNR) %>%
+  summarise( 
+    n=n(),
+    mean=mean(LetterID),
+    sd=sd(LetterID)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum5)
+
+my_sum6 <- data %>%
+  group_by(facilitationNR) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Age),
+    sd=sd(Age)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum6)
+
+my_sum7 <- data %>%
+  group_by(facilitation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Age),
+    sd=sd(Age)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum7)
+
+my_sum8 <- data %>%
+  group_by(facilitation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(LetterID),
+    sd=sd(LetterID)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum8)
+
+my_sum9 <- data %>%
+  group_by(facilitation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Readingint),
+    sd=sd(Readingint)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+View(my_sum9)
+
+
+#Removed those that failed warmup or didn't respond to any trails
+data <- read_xlsx("C:/Users/clarkg7/OneDrive - William Paterson University/Desktop/Dissertation/Data/MLM data_fail.xlsx")
+
+#Create conditions with no reference level
+data$ortho<-ifelse(data$condition=="present", .5, -.5)
+head(data)
+describe(data)
+
+
+#correctly label all variables
+data$ortho<-as.factor(data$ortho)
+data$Gender<-as.factor(data$Gender)
+data$Age<-as.numeric(data$Age)
+data$ReadingCG<-as.factor(data$ReadingCG)
+data$Readingint<-as.factor(data$Readingint)
+data$LetterID<-as.numeric(data$LetterID)
+
+
+
+#Create centered age field
+data$AgeC<-data$Age-mean(data$Age)
+head(data)
+
+#Empty model
+m0<-glmer(correct~(1|ID), data=data, family=binomial)
+summary(m0)
+#empty model intercept NS
+
+#to see if ortho has effect 
+m1<-glmer(correct~(1|ID)+ortho, data=data, family=binomial)
+summary(m1)
+#intercept NS, ortho NS
+
+
+#to see if other fixed effects contribute to variance
+m2<-glmer(correct~(1|ID)+AgeC, data=data, family=binomial)
+summary(m2)
+#very large eigenvalue; rescale age
+data$AgeCS<-data$AgeC/10
+m3<-glmer(correct~(1|ID)+AgeCS, data=data, family=binomial)
+summary(m3)
+#Age NS
+
+#to see if reading interest contributes to variance
+m5<-glmer(correct~(1|ID)+Readingint, data=data, family=binomial)
+summary(m5)
+#failed to converge- try to rerun as numeric instead of as factor. Some values approaching significance
+#when reran as numeric, reading interest NS
+
+#to see if letter ID skills contributes to variance
+m6<-glmer(correct~(1|ID)+LetterID, data=data, family=binomial)
+summary(m6)
+#Letter ID NS
+
+#interaction check
+m7<-glmer(correct~(1|ID)+ortho*LetterID, data=data, family=binomial)
+summary(m7)
+#all factors and interactions NS
+
+m8<-glmer(correct~(1|ID)+ortho*Readingint, data=data, family=binomial)
+summary(m8)
+#all factors and interactions NS
+
+m9<-glmer(correct~(1|ID)+ortho*AgeCS, data=data, family=binomial)
+summary(m9)
+#all factors and interactions NS
